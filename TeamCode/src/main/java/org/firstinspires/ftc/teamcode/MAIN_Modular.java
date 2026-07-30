@@ -39,6 +39,25 @@ public class MAIN_Modular extends LinearOpMode {
   private ElapsedTime servosIdleTimer;
   private double fullSpeedScale;
 
+  private boolean emergencyStopRequested;
+  private boolean resetYawRequested;
+  private boolean brakeDriveRequested;
+  private boolean useRelativeDrive;
+  private boolean flywheelForwardRequested;
+  private boolean flywheelReverseRequested;
+  private boolean bankShotRequested;
+  private boolean farShotRequested;
+  private boolean manualCoreHexRequested;
+  private boolean stopFlywheelRequested;
+  private boolean stopCoreHexRequested;
+  private boolean stopFeederRequested;
+  private boolean frontServoEnableRequested;
+  private boolean frontServoIncreaseRequested;
+  private boolean frontServoDecreaseRequested;
+  private double driveForwardInput;
+  private double driveStrafeInput;
+  private double driveRotateInput;
+
   @Override
   public void runOpMode() {
     initializeHardware();
@@ -47,6 +66,7 @@ public class MAIN_Modular extends LinearOpMode {
 
     while (opModeIsActive()) {
       if (controlHubVoltageSensor.getVoltage() > 7) {
+        updateControllerInputs();
         updateDriveMotors();
         updateFlywheelMotor();
         updateCoreHexMotor();
@@ -112,8 +132,32 @@ public class MAIN_Modular extends LinearOpMode {
     frontServoPosition = 0;
   }
 
+  private void updateControllerInputs() {
+    emergencyStopRequested = gamepad1.ps;
+    resetYawRequested = gamepad1.a;
+    brakeDriveRequested = gamepad1.x;
+    useRelativeDrive = gamepad2.right_bumper;
+    flywheelForwardRequested = gamepad1.dpad_up;
+    flywheelReverseRequested = gamepad1.dpad_down;
+    bankShotRequested = gamepad1.left_bumper;
+    farShotRequested = gamepad1.right_bumper;
+    manualCoreHexRequested = gamepad1.y;
+    frontServoEnableRequested = gamepad2.back || gamepad2.start;
+    frontServoIncreaseRequested = gamepad2.start;
+    frontServoDecreaseRequested = gamepad2.back;
+
+    driveForwardInput = gamepad1.left_stick_y;
+    driveStrafeInput = -gamepad1.left_stick_x;
+    driveRotateInput = -gamepad1.right_stick_x;
+    speedScale = Math.max(1 - gamepad1.right_trigger, slowSpeed);
+
+    stopFlywheelRequested = !flywheelForwardRequested && !flywheelReverseRequested && !bankShotRequested && !farShotRequested;
+    stopCoreHexRequested = !bankShotRequested && !farShotRequested && !manualCoreHexRequested && !gamepad1.b && !gamepad1.y && !gamepad1.a;
+    stopFeederRequested = !gamepad1.ps && !gamepad1.a && !gamepad1.b;
+  }
+
   private void updateDriveMotors() {
-    if (gamepad1.ps) {
+    if (emergencyStopRequested) {
       drive(0, 0, 0);
       coreHex.setPower(-1);
       ((DcMotorEx) flywheel).setVelocity(-3000);
@@ -121,61 +165,64 @@ public class MAIN_Modular extends LinearOpMode {
       return;
     }
 
-    if (gamepad1.a) {
+    if (resetYawRequested) {
       imu.resetYaw();
     }
 
-    speedScale = Math.max(1 - gamepad1.right_trigger, slowSpeed);
-
-    if (gamepad1.x) {
+    if (brakeDriveRequested) {
       backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
     } else {
       backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
     }
-    drive(gamepad1.left_stick_y * speedScale, -(gamepad1.left_stick_x * speedScale), -(gamepad1.right_stick_x * speedScale));
+
+    if (useRelativeDrive) {
+      driveRelative(driveForwardInput * speedScale, driveStrafeInput * speedScale, (int) (driveRotateInput * speedScale));
+    } else {
+      drive(driveForwardInput * speedScale, driveStrafeInput * speedScale, driveRotateInput * speedScale);
+    }
   }
 
   private void updateFlywheelMotor() {
-    if (gamepad1.ps) {
+    if (emergencyStopRequested) {
       return;
     }
 
-    if (gamepad1.dpad_up) {
+    if (flywheelForwardRequested) {
       ((DcMotorEx) flywheel).setVelocity(-shotVelocity);
-    } else if (gamepad1.dpad_down) {
+    } else if (flywheelReverseRequested) {
       ((DcMotorEx) flywheel).setVelocity(shotVelocity);
-    } else if (!gamepad1.left_bumper && !gamepad1.right_bumper) {
+    } else if (stopFlywheelRequested) {
       ((DcMotorEx) flywheel).setVelocity(0);
     }
   }
 
   private void updateCoreHexMotor() {
-    if (gamepad1.ps) {
+    if (emergencyStopRequested) {
       return;
     }
 
-    if (gamepad1.left_bumper) {
+    if (bankShotRequested) {
       bankShotAuto();
-    } else if (gamepad1.right_bumper) {
+    } else if (farShotRequested) {
       farPowerAuto();
-    } else if (gamepad1.y) {
+    } else if (manualCoreHexRequested) {
       coreHex.setPower(-0.5);
-    } else if (!gamepad1.b && !gamepad1.y && !gamepad1.a) {
+    } else if (stopCoreHexRequested) {
       coreHex.setPower(0);
     }
   }
 
   private void updateFeederServo() {
-    if (gamepad1.ps) {
+    if (emergencyStopRequested) {
       servo.setPower(1);
       return;
     }
 
-    if (gamepad1.left_bumper || gamepad1.right_bumper) {
+    if (bankShotRequested || farShotRequested) {
       return;
     }
 
-    if (!gamepad1.ps && !gamepad1.a && !gamepad1.b) {
+    if (stopFeederRequested) {
       servo.setPower(0);
     }
   }
@@ -184,15 +231,15 @@ public class MAIN_Modular extends LinearOpMode {
     telemetry.addData("leftyPos", lefty.getPosition());
     telemetry.addData("rightyPos", righty.getPosition());
 
-    if (gamepad2.back || gamepad2.start) {
+    if (frontServoEnableRequested) {
       lefty.setPwmEnable();
       righty.setPwmEnable();
       servosIdleTimer.reset();
     }
 
-    if (gamepad2.start) {
+    if (frontServoIncreaseRequested) {
       frontServoPosition = Math.min(1.0, frontServoPosition + 0.05);
-    } else if (gamepad2.back) {
+    } else if (frontServoDecreaseRequested) {
       frontServoPosition = Math.max(0.0, frontServoPosition - 0.05);
     }
 
