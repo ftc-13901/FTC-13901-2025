@@ -121,7 +121,7 @@ public class MAIN_Modular extends LinearOpMode {
       return;
     }
 
-    if (gamepad2.a) {
+    if (gamepad1.a) {
       imu.resetYaw();
     }
 
@@ -132,12 +132,7 @@ public class MAIN_Modular extends LinearOpMode {
     } else {
       backLeft.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
     }
-
-    if (!gamepad2.right_bumper) {
-      drive(gamepad1.left_stick_y * speedScale, -(gamepad1.left_stick_x * speedScale), -(gamepad1.right_stick_x * speedScale));
-    } else {
-      driveRelative(gamepad1.left_stick_y * speedScale, -(gamepad1.left_stick_x * speedScale), (int) -(gamepad1.right_stick_x * speedScale));
-    }
+    drive(gamepad1.left_stick_y * speedScale, -(gamepad1.left_stick_x * speedScale), -(gamepad1.right_stick_x * speedScale));
   }
 
   private void updateFlywheelMotor() {
